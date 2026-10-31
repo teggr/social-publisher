@@ -37,7 +37,8 @@ public class PublishingService {
     }
 
     PublishingResult attempt =
-        repository.update(
+        repository
+            .update(
                 id,
                 current -> {
                   if (!current.isApproved()) {

@@ -6,8 +6,6 @@ public class TemplatePostGenerator implements PostGenerator {
     if (prompt == null || prompt.isBlank()) {
       throw new IllegalArgumentException("Generation topic must not be empty");
     }
-    return "A thought on "
-        + prompt.trim()
-        + ": What have you learned about it recently?";
+    return "A thought on " + prompt.trim() + ": What have you learned about it recently?";
   }
 }

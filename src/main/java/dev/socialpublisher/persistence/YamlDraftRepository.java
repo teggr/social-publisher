@@ -81,6 +81,8 @@ public class YamlDraftRepository {
         throw e;
       } catch (IOException e) {
         throw e;
+      } catch (RuntimeException e) {
+        throw e;
       } catch (Exception e) {
         throw new IOException("Could not update draft " + id, e);
       }
@@ -88,8 +90,7 @@ public class YamlDraftRepository {
   }
 
   private void writeAtomic(Path destination, SocialPost post) throws IOException {
-    Path temporary =
-        Files.createTempFile(draftsDirectory, post.getId() + "-", ".tmp");
+    Path temporary = Files.createTempFile(draftsDirectory, post.getId() + "-", ".tmp");
     try {
       YAML_MAPPER.writeValue(temporary.toFile(), post);
       try {

@@ -13,8 +13,8 @@ import dev.socialpublisher.publishing.BlueskyPublisher;
 import dev.socialpublisher.publishing.PlatformPublisher;
 import dev.socialpublisher.publishing.PublishOutcome;
 import dev.socialpublisher.publishing.PublishingService;
-import java.io.PrintStream;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -47,7 +47,8 @@ public final class Main {
       Path dataDirectory = Path.of(config.getDataDirectory());
       YamlDraftRepository repository = new YamlDraftRepository(dataDirectory);
       List<PlatformPublisher> publishers =
-          List.of(new BlueskyPublisher(config, java.net.http.HttpClient.newHttpClient(), environment));
+          List.of(
+              new BlueskyPublisher(config, java.net.http.HttpClient.newHttpClient(), environment));
       PublishingService publishingService = new PublishingService(repository, publishers);
       return execute(arguments, repository, publishingService, new TemplatePostGenerator(), out);
     } catch (Exception e) {
@@ -163,9 +164,7 @@ public final class Main {
       for (SocialPost post : repository.findAll()) {
         out.printf(
             "%s  %s  %s%n",
-            post.getId(),
-            post.isApproved() ? "approved" : "draft",
-            oneLine(post.getText()));
+            post.getId(), post.isApproved() ? "approved" : "draft", oneLine(post.getText()));
       }
       return 0;
     }
@@ -217,7 +216,8 @@ public final class Main {
   }
 
   private static Path configPath(List<String> args, Map<String, String> environment) {
-    String configuredPath = environment.getOrDefault("SOCIAL_PUBLISHER_CONFIG", "social-publisher.yml");
+    String configuredPath =
+        environment.getOrDefault("SOCIAL_PUBLISHER_CONFIG", "social-publisher.yml");
     for (int i = 0; i < args.size(); i++) {
       String arg = args.get(i);
       if (arg.startsWith("--config=")) {

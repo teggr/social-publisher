@@ -82,8 +82,7 @@ public class BlueskyPublisher implements PlatformPublisher {
     }
   }
 
-  private JsonNode sendBeforePublishing(String url, Map<String, ?> body)
-      throws PublishException {
+  private JsonNode sendBeforePublishing(String url, Map<String, ?> body) throws PublishException {
     try {
       return send(url, body, null);
     } catch (PublishException e) {
@@ -91,8 +90,7 @@ public class BlueskyPublisher implements PlatformPublisher {
     }
   }
 
-  private JsonNode send(String url, Map<String, ?> body, String accessJwt)
-      throws PublishException {
+  private JsonNode send(String url, Map<String, ?> body, String accessJwt) throws PublishException {
     try {
       HttpRequest.Builder request =
           HttpRequest.newBuilder(URI.create(url))
@@ -106,8 +104,7 @@ public class BlueskyPublisher implements PlatformPublisher {
           httpClient.send(request.build(), HttpResponse.BodyHandlers.ofString());
       if (response.statusCode() < 200 || response.statusCode() >= 300) {
         boolean retrySafe = response.statusCode() < 500;
-        throw new PublishException(
-            "Bluesky returned HTTP " + response.statusCode(), retrySafe);
+        throw new PublishException("Bluesky returned HTTP " + response.statusCode(), retrySafe);
       }
       return JSON_MAPPER.readTree(response.body());
     } catch (PublishException e) {
