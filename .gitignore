@@ -1,0 +1,4 @@
+/target/
+/.social-publisher/
+/social-publisher.yml
+*.tmp
