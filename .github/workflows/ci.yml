@@ -19,7 +19,7 @@ jobs:
       matrix:
         java: ['17', '21']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -31,7 +31,7 @@ jobs:
   jbang-smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install JBang (it downloads Java 17 itself)
         run: |
           curl -Ls https://sh.jbang.dev | bash -s - app setup
