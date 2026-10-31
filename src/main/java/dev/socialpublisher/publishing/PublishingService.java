@@ -65,24 +65,9 @@ public class PublishingService {
               result.setRetrySafe(false);
             });
 
+    PublishReceipt receipt;
     try {
-      PublishReceipt receipt = publisher.publish(postToPublish);
-      PublishingResult result =
-          repository
-              .update(
-                  id,
-                  current -> {
-                    PublishingResult currentResult = resultFor(current, platform);
-                    currentResult.setStatus(PublishingStatus.PUBLISHED);
-                    currentResult.setRemoteId(receipt.remoteId());
-                    currentResult.setUrl(receipt.url());
-                    currentResult.setPublishedAt(Instant.now().toString());
-                    currentResult.setError(null);
-                    currentResult.setRetrySafe(false);
-                  })
-              .getPublishingResults()
-              .get(platform);
-      return new PublishOutcome(false, null, result);
+      receipt = publisher.publish(postToPublish);
     } catch (PublishException e) {
       PublishingResult result =
           repository
@@ -110,6 +95,76 @@ public class PublishingService {
           });
       throw e;
     }
+
+    try {
+      PublishingResult result =
+          repository
+              .update(
+                  id,
+                  current -> {
+                    PublishingResult currentResult = resultFor(current, platform);
+                    currentResult.setStatus(PublishingStatus.PUBLISHED);
+                    currentResult.setRemoteId(receipt.remoteId());
+                    currentResult.setUrl(receipt.url());
+                    currentResult.setPublishedAt(Instant.now().toString());
+                    currentResult.setError(null);
+                    currentResult.setRetrySafe(false);
+                  })
+              .getPublishingResults()
+              .get(platform);
+      return new PublishOutcome(false, null, result);
+    } catch (IOException e) {
+      // The post is live but the local record could not be updated; it stays IN_PROGRESS.
+      throw new IOException(
+          "Published to "
+              + platform
+              + " ("
+              + receipt.remoteId()
+              + ") but could not record the result; reconcile with --outcome published",
+          e);
+    }
+  }
+
+  /**
+   * Resolves an IN_PROGRESS, UNKNOWN or non-retry-safe FAILED result after the operator has checked
+   * the platform. Never contacts the platform.
+   */
+  public PublishingResult reconcile(
+      String id, Platform platform, boolean published, String remoteId, String url)
+      throws IOException {
+    if (published && (remoteId == null || remoteId.isBlank())) {
+      throw new IllegalArgumentException("A remote ID is required to reconcile as published");
+    }
+    return repository
+        .update(
+            id,
+            current -> {
+              PublishingResult result = current.getPublishingResults().get(platform);
+              boolean reconcilable =
+                  result != null
+                      && (result.getStatus() == PublishingStatus.IN_PROGRESS
+                          || result.getStatus() == PublishingStatus.UNKNOWN
+                          || (result.getStatus() == PublishingStatus.FAILED
+                              && !result.isRetrySafe()));
+              if (!reconcilable) {
+                throw new IllegalStateException(
+                    "Nothing to reconcile for " + platform + "; only unresolved results qualify");
+              }
+              String now = Instant.now().toString();
+              if (published) {
+                result.setStatus(PublishingStatus.PUBLISHED);
+                result.setRemoteId(remoteId);
+                result.setUrl(url);
+                result.setPublishedAt(now);
+                result.setError(null);
+              } else {
+                result.setStatus(PublishingStatus.FAILED);
+                result.setError("Operator confirmed the post was not published (" + now + ")");
+              }
+              result.setRetrySafe(!published);
+            })
+        .getPublishingResults()
+        .get(platform);
   }
 
   private PublishingResult resultFor(SocialPost post, Platform platform) {

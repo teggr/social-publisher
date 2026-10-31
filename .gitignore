@@ -2,3 +2,4 @@
 /.social-publisher/
 /social-publisher.yml
 *.tmp
+*.lock

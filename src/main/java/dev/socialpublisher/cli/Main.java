@@ -145,7 +145,7 @@ public final class Main {
       if (args.size() < 2) {
         throw new IllegalArgumentException("Expected a draft ID");
       }
-      Platform platform = Platform.valueOf(requiredOption(args, "--platform").toUpperCase());
+      Platform platform = parsePlatform(requiredOption(args, "--platform"));
       boolean dryRun = args.contains("--dry-run");
       PublishOutcome outcome = publishingService.publish(args.get(1), platform, dryRun);
       if (outcome.dryRun()) {
@@ -160,6 +160,30 @@ public final class Main {
       }
       return 0;
     }
+    if ("reconcile".equals(command)) {
+      if (args.size() < 2) {
+        throw new IllegalArgumentException("Expected a draft ID");
+      }
+      Platform platform = parsePlatform(requiredOption(args, "--platform"));
+      String outcome = requiredOption(args, "--outcome");
+      boolean published;
+      if ("published".equals(outcome)) {
+        published = true;
+      } else if ("not-published".equals(outcome)) {
+        published = false;
+      } else {
+        throw new IllegalArgumentException("--outcome must be published or not-published");
+      }
+      PublishingResult result =
+          publishingService.reconcile(
+              args.get(1),
+              platform,
+              published,
+              option(args, "--remote-id", null),
+              option(args, "--url", null));
+      out.println("Reconciled " + platform + " as " + result.getStatus());
+      return 0;
+    }
     if ("list".equals(command)) {
       for (SocialPost post : repository.findAll()) {
         out.printf(
@@ -169,6 +193,14 @@ public final class Main {
       return 0;
     }
     throw new IllegalArgumentException("Unknown command: " + command);
+  }
+
+  private static Platform parsePlatform(String value) {
+    try {
+      return Platform.valueOf(value.toUpperCase(java.util.Locale.ROOT));
+    } catch (IllegalArgumentException e) {
+      throw new IllegalArgumentException("Unknown platform: " + value);
+    }
   }
 
   private static SocialPost createPost(String text) {
@@ -252,6 +284,8 @@ public final class Main {
           jbang social-publisher.java approve <id> [--by <name>]
           jbang social-publisher.java preview <id>
           jbang social-publisher.java publish <id> --platform BLUESKY [--dry-run]
+          jbang social-publisher.java reconcile <id> --platform BLUESKY
+              --outcome published|not-published [--remote-id <id>] [--url <url>]
           jbang social-publisher.java list
 
         Global options:

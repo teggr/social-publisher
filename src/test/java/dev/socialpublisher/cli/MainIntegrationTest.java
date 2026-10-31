@@ -49,6 +49,59 @@ class MainIntegrationTest {
   }
 
   @Test
+  void reconcileCommandRejectsBadInputAndResolvedDrafts() throws Exception {
+    Path data = tempDirectory.resolve("data");
+    Path config = tempDirectory.resolve("social-publisher.yml");
+    Files.writeString(config, "dataDirectory: " + data + System.lineSeparator());
+    Map<String, String> environment = Map.of("SOCIAL_PUBLISHER_CONFIG", config.toString());
+    String id =
+        Pattern.compile("Created draft ([0-9a-f-]{36})")
+            .matcher(invoke(environment, "draft", "create", "--text", "Hi").output)
+            .results()
+            .findFirst()
+            .orElseThrow()
+            .group(1);
+    new YamlDraftRepository(data)
+        .update(
+            id,
+            post -> {
+              var result = new dev.socialpublisher.model.PublishingResult();
+              result.setStatus(dev.socialpublisher.model.PublishingStatus.UNKNOWN);
+              post.getPublishingResults().put(dev.socialpublisher.model.Platform.BLUESKY, result);
+            });
+
+    assertEquals(
+        2,
+        invoke(environment, "reconcile", id, "--platform", "NOPE", "--outcome", "published")
+            .exitCode);
+    assertEquals(
+        2,
+        invoke(environment, "reconcile", id, "--platform", "BLUESKY", "--outcome", "maybe")
+            .exitCode);
+    assertEquals(
+        2,
+        invoke(environment, "reconcile", id, "--platform", "BLUESKY", "--outcome", "published")
+            .exitCode);
+    CliResult ok =
+        invoke(
+            environment,
+            "reconcile",
+            id,
+            "--platform",
+            "BLUESKY",
+            "--outcome",
+            "published",
+            "--remote-id",
+            "at://x");
+    assertEquals(0, ok.exitCode);
+    assertTrue(ok.output.contains("PUBLISHED"));
+    assertEquals(
+        2,
+        invoke(environment, "reconcile", id, "--platform", "BLUESKY", "--outcome", "not-published")
+            .exitCode);
+  }
+
+  @Test
   void generationCreatesAnUnapprovedDraft() throws Exception {
     Path data = tempDirectory.resolve("generated");
     Path config = tempDirectory.resolve("generated.yml");

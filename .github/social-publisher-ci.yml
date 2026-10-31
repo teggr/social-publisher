@@ -1,0 +1,4 @@
+dataDirectory: social-publisher-data
+blueskyService: https://bsky.social
+blueskyIdentifierEnv: BLUESKY_IDENTIFIER
+blueskyAppPasswordEnv: BLUESKY_APP_PASSWORD
