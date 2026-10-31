@@ -42,7 +42,7 @@ jobs:
       - name: Validate inputs
         run: |
           [[ "$DRAFT_ID" =~ ^[0-9a-fA-F-]{36}$ ]] || { echo "Invalid draft ID"; exit 1; }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: main
       - name: Install JBang
