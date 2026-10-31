@@ -114,6 +114,10 @@ history, or CI configuration.
   publishes, and state is committed to `main` even after failures. Drafts for
   CI live in `social-publisher-data/drafts/` (see `.github/social-publisher-ci.yml`).
 - Dry runs make no network request and do not claim a publication result.
+- Bootstrap: `social-publisher-data/drafts/` is tracked via `.gitkeep`. Create,
+  approve, and commit a draft locally (`dataDirectory: social-publisher-data` in
+  `.github/social-publisher-ci.yml`, e.g. via `--config`) and push it to `main`
+  before dispatching `publish.yml`.
 
 ## Development
 
