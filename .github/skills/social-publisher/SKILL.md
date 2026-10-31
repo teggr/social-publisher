@@ -31,7 +31,7 @@ unless the task explicitly asks for data migration or repair.
   names (`BLUESKY_IDENTIFIER` and `BLUESKY_APP_PASSWORD` by default).
 - Do not publish unapproved content or claim that a dry run was published.
 - Treat `IN_PROGRESS` and `UNKNOWN` as potentially published. Verify the
-  platform manually before any operator-led recovery; automatic retries are
+  platform manually, then use `reconcile` (never edit YAML); automatic retries are
   intentionally blocked to prevent duplicates.
 - Publishing state is independent for each platform. Bluesky is the only live
   adapter in this milestone; LinkedIn, X, and Mastodon are not configured.

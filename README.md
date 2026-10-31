@@ -6,8 +6,13 @@ database, web application, or consuming-site integration is included.
 
 ## Requirements
 
-- Java 17 or newer
-- [JBang](https://www.jbang.dev/) to run the CLI
+- Java 17 or newer for Maven builds (JDK 17 or 21 is tested in CI; Spotless'
+  google-java-format 1.24 fails on very new JDKs such as 27, so run
+  `./mvnw verify` on 17 or 21)
+- [JBang](https://www.jbang.dev/) to run the CLI. JBang downloads JDK 17 and
+  the Jackson YAML dependency (declared in `social-publisher.java`) itself, so
+  no prior Java or Maven setup is needed. `scripts/jbang-smoke.sh` verifies
+  this and runs in CI.
 - Git for source checkout
 
 The Maven Wrapper is included for build and test commands; a separate Maven
@@ -89,8 +94,25 @@ history, or CI configuration.
 - A known-safe failure can be retried. An ambiguous request outcome is recorded
   as `UNKNOWN` and blocks automatic retries to avoid duplicate posts.
 - A process interrupted after recording `IN_PROGRESS` also blocks a new attempt.
-  Check the platform manually before resolving either state; no reconciliation
-  or reset command is provided yet.
+  Check the platform manually, then resolve either state with
+  `reconcile <id> --platform BLUESKY --outcome published --remote-id <at-uri> [--url <url>]`
+  or `--outcome not-published` (which makes a retry possible). `reconcile`
+  never contacts the platform and only accepts `IN_PROGRESS`, `UNKNOWN`, or
+  non-retry-safe `FAILED` results.
+- Bluesky posts are limited to 300 graphemes; links and hashtags become rich-text
+  facets. HTTP 4xx (except 408) is treated as a safe rejection (429 includes
+  the retry hint); 5xx, timeouts and transport errors are `UNKNOWN`. Link
+  cards and images are not implemented.
+
+## GitHub Actions
+
+- `ci.yml`: `./mvnw verify` (tests + Spotless) on Java 17/21 and the JBang smoke test.
+- `codeql.yml`: CodeQL analysis; `dependabot.yml` tracks Maven and Actions updates.
+- `publish.yml`: manual dispatch of one approved draft on `main`. Create a
+  `publishing` environment holding `BLUESKY_IDENTIFIER`/`BLUESKY_APP_PASSWORD`
+  and required reviewers. A repository-wide concurrency group serialises
+  publishes, and state is committed to `main` even after failures. Drafts for
+  CI live in `social-publisher-data/drafts/` (see `.github/social-publisher-ci.yml`).
 - Dry runs make no network request and do not claim a publication result.
 
 ## Development
@@ -109,7 +131,7 @@ JBang launcher loads the same application sources tested by Maven.
 - **Working:** YAML drafts/configuration, create/edit/approve/preview/list
   commands, a provider-neutral generation interface, a deterministic starter
   generator, dry-run publishing, and live Bluesky session/post creation.
-- **Not implemented:** AI-provider integration, LinkedIn, X, Mastodon, scheduling,
+- **Not implemented:** Bluesky link cards/images, AI-provider integration, LinkedIn, X, Mastodon, scheduling,
   automated retries/reconciliation, multi-user access control, and web or
   consuming-site integrations. Other platforms can be added independently via
   the `PlatformPublisher` interface.

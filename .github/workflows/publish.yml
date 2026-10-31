@@ -1,0 +1,76 @@
+name: Publish approved draft
+
+on:
+  workflow_dispatch:
+    inputs:
+      draft_id:
+        description: Draft ID (must already be approved and committed to main)
+        required: true
+      platform:
+        description: Platform
+        type: choice
+        options: [BLUESKY]
+        default: BLUESKY
+      dry_run:
+        description: Dry run (no network request, no state change)
+        type: boolean
+        default: true
+
+# One publish at a time repository-wide so runs cannot race on a draft or on
+# pushing state. Runs queue rather than cancel.
+concurrency:
+  group: social-publisher-publish
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Put the Bluesky secrets and required reviewers on this environment.
+    environment: publishing
+    permissions:
+      contents: write
+    env:
+      DRAFT_ID: ${{ inputs.draft_id }}
+      PLATFORM: ${{ inputs.platform }}
+      DRY_RUN: ${{ inputs.dry_run }}
+      SOCIAL_PUBLISHER_CONFIG: ${{ github.workspace }}/.github/social-publisher-ci.yml
+    steps:
+      - name: Validate inputs
+        run: |
+          [[ "$DRAFT_ID" =~ ^[0-9a-fA-F-]{36}$ ]] || { echo "Invalid draft ID"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Install JBang
+        run: |
+          curl -Ls https://sh.jbang.dev | bash -s - app setup
+          echo "$HOME/.jbang/bin" >> "$GITHUB_PATH"
+      # The CLI itself refuses unapproved drafts and IN_PROGRESS/UNKNOWN states.
+      - name: Publish
+        env:
+          BLUESKY_IDENTIFIER: ${{ secrets.BLUESKY_IDENTIFIER }}
+          BLUESKY_APP_PASSWORD: ${{ secrets.BLUESKY_APP_PASSWORD }}
+        run: |
+          args=(publish "$DRAFT_ID" --platform "$PLATFORM")
+          if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          jbang social-publisher.java "${args[@]}"
+      # Runs even if publishing failed so FAILED/UNKNOWN/IN_PROGRESS is recorded
+      # and blocks duplicate publication from later runs.
+      - name: Commit publishing state
+        if: ${{ always() && inputs.dry_run != true }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- social-publisher-data/drafts/*.yaml
+          git diff --cached --quiet && exit 0
+          git commit -m "Record publishing state for $DRAFT_ID [skip ci]"
+          for attempt in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep $((attempt * 3))
+          done
+          echo "Could not push publishing state; reconcile manually." >&2
+          exit 1
