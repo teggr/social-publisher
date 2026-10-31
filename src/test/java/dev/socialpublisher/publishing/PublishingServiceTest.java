@@ -55,6 +55,9 @@ class PublishingServiceTest {
     assertEquals(
         PublishingStatus.PUBLISHED,
         published.getPublishingResults().get(Platform.LINKEDIN).getStatus());
+    assertEquals(
+        PublishingStatus.IN_PROGRESS,
+        bluesky.lastPost.getPublishingResults().get(Platform.BLUESKY).getStatus());
     assertThrows(
         IllegalStateException.class, () -> service.publish(post.getId(), Platform.BLUESKY, false));
     assertEquals(1, bluesky.calls);
@@ -123,6 +126,7 @@ class PublishingServiceTest {
     private final Platform platform;
     private int calls;
     private PublishException failure;
+    private SocialPost lastPost;
 
     private StubPublisher(Platform platform) {
       this.platform = platform;
@@ -136,6 +140,7 @@ class PublishingServiceTest {
     @Override
     public PublishReceipt publish(SocialPost post) throws PublishException {
       calls++;
+      lastPost = post;
       if (failure != null) {
         throw failure;
       }

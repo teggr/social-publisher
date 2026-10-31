@@ -16,9 +16,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class BlueskyPublisher implements PlatformPublisher {
   private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
+  private static final Pattern POST_URI =
+      Pattern.compile("^at://[^/]+/app\\.bsky\\.feed\\.post/([^/]+)$");
   private final AppConfig config;
   private final HttpClient httpClient;
   private final Function<String, String> environment;
@@ -46,6 +50,7 @@ public class BlueskyPublisher implements PlatformPublisher {
 
   @Override
   public PublishReceipt publish(SocialPost post) throws PublishException {
+    String service = serviceBase();
     String identifier = environment.apply(config.getBlueskyIdentifierEnv());
     String password = environment.apply(config.getBlueskyAppPasswordEnv());
     if (isBlank(identifier) || isBlank(password)) {
@@ -53,13 +58,12 @@ public class BlueskyPublisher implements PlatformPublisher {
           "Bluesky credentials are missing from the configured environment variables", true);
     }
 
-    String service = config.getBlueskyService().replaceAll("/+$", "");
     JsonNode session =
         sendBeforePublishing(
             service + "/xrpc/com.atproto.server.createSession",
             Map.of("identifier", identifier, "password", password));
-    String accessJwt = requiredField(session, "accessJwt", "Bluesky session response");
-    String did = requiredField(session, "did", "Bluesky session response");
+    String accessJwt = requiredField(session, "accessJwt", "Bluesky session response", true);
+    String did = requiredField(session, "did", "Bluesky session response", true);
 
     Map<String, Object> record =
         Map.of(
@@ -119,24 +123,52 @@ public class BlueskyPublisher implements PlatformPublisher {
 
   private String requiredField(JsonNode node, String field, String description)
       throws PublishException {
+    return requiredField(node, field, description, false);
+  }
+
+  private String requiredField(JsonNode node, String field, String description, boolean retrySafe)
+      throws PublishException {
     JsonNode value = node == null ? null : node.get(field);
     if (value == null || value.isNull() || value.asText().isBlank()) {
-      throw new PublishException("Invalid " + description, false);
+      throw new PublishException("Invalid " + description, retrySafe);
     }
     return value.asText();
   }
 
-  private String postUrl(String uri, String identifier) {
-    String[] parts = uri.split("/");
-    if (parts.length < 2) {
-      return null;
+  private String postUrl(String uri, String identifier) throws PublishException {
+    Matcher match = POST_URI.matcher(uri);
+    if (!match.matches()) {
+      throw new PublishException("Invalid Bluesky post URI", false);
     }
-    String rkey = parts[parts.length - 1];
     String encodedIdentifier = URLEncoder.encode(identifier, StandardCharsets.UTF_8);
-    return "https://bsky.app/profile/" + encodedIdentifier + "/post/" + rkey;
+    return "https://bsky.app/profile/" + encodedIdentifier + "/post/" + match.group(1);
   }
 
   private boolean isBlank(String value) {
     return value == null || value.isBlank();
+  }
+
+  private String serviceBase() throws PublishException {
+    try {
+      URI uri = URI.create(config.getBlueskyService());
+      String scheme = uri.getScheme();
+      String host = uri.getHost();
+      boolean localHttp =
+          "http".equalsIgnoreCase(scheme)
+              && ("localhost".equalsIgnoreCase(host)
+                  || "127.0.0.1".equals(host)
+                  || "::1".equals(host));
+      if ((!"https".equalsIgnoreCase(scheme) && !localHttp)
+          || host == null
+          || uri.getRawUserInfo() != null
+          || uri.getRawQuery() != null
+          || uri.getRawFragment() != null) {
+        throw new PublishException(
+            "Bluesky service must use HTTPS (HTTP is allowed only for loopback testing)", true);
+      }
+      return uri.toString().replaceAll("/+$", "");
+    } catch (IllegalArgumentException e) {
+      throw new PublishException("Invalid Bluesky service URL", true, e);
+    }
   }
 }

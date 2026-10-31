@@ -36,40 +36,37 @@ public class PublishingService {
       return new PublishOutcome(true, post.getText(), null);
     }
 
-    PublishingResult attempt =
-        repository
-            .update(
-                id,
-                current -> {
-                  if (!current.isApproved()) {
-                    throw new IllegalStateException("Draft must be approved before publishing");
-                  }
-                  PublishingResult result = resultFor(current, platform);
-                  if (result.getStatus() == PublishingStatus.PUBLISHED) {
-                    throw new IllegalStateException("Draft is already published to " + platform);
-                  }
-                  if (result.getStatus() == PublishingStatus.IN_PROGRESS
-                      || result.getStatus() == PublishingStatus.UNKNOWN) {
-                    throw new IllegalStateException(
-                        "A previous publication outcome is unresolved for "
-                            + platform
-                            + "; reconcile it before retrying");
-                  }
-                  if (result.getStatus() == PublishingStatus.FAILED && !result.isRetrySafe()) {
-                    throw new IllegalStateException(
-                        "A previous publication failure is not safe to retry for " + platform);
-                  }
-                  result.setStatus(PublishingStatus.IN_PROGRESS);
-                  result.setAttemptedAt(Instant.now().toString());
-                  result.setAttempts(result.getAttempts() + 1);
-                  result.setError(null);
-                  result.setRetrySafe(false);
-                })
-            .getPublishingResults()
-            .get(platform);
+    SocialPost postToPublish =
+        repository.update(
+            id,
+            current -> {
+              if (!current.isApproved()) {
+                throw new IllegalStateException("Draft must be approved before publishing");
+              }
+              PublishingResult result = resultFor(current, platform);
+              if (result.getStatus() == PublishingStatus.PUBLISHED) {
+                throw new IllegalStateException("Draft is already published to " + platform);
+              }
+              if (result.getStatus() == PublishingStatus.IN_PROGRESS
+                  || result.getStatus() == PublishingStatus.UNKNOWN) {
+                throw new IllegalStateException(
+                    "A previous publication outcome is unresolved for "
+                        + platform
+                        + "; reconcile it before retrying");
+              }
+              if (result.getStatus() == PublishingStatus.FAILED && !result.isRetrySafe()) {
+                throw new IllegalStateException(
+                    "A previous publication failure is not safe to retry for " + platform);
+              }
+              result.setStatus(PublishingStatus.IN_PROGRESS);
+              result.setAttemptedAt(Instant.now().toString());
+              result.setAttempts(result.getAttempts() + 1);
+              result.setError(null);
+              result.setRetrySafe(false);
+            });
 
     try {
-      PublishReceipt receipt = publisher.publish(post);
+      PublishReceipt receipt = publisher.publish(postToPublish);
       PublishingResult result =
           repository
               .update(

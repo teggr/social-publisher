@@ -15,11 +15,20 @@ public final class ConfigLoader {
       return new AppConfig();
     }
     AppConfig config = YAML_MAPPER.readValue(path.toFile(), AppConfig.class);
+    if (config == null) {
+      throw new IOException("Configuration file must contain a YAML mapping");
+    }
     if (config.getDataDirectory() == null || config.getDataDirectory().isBlank()) {
       throw new IOException("Configuration dataDirectory must not be empty");
     }
     if (config.getBlueskyService() == null || config.getBlueskyService().isBlank()) {
       throw new IOException("Configuration blueskyService must not be empty");
+    }
+    if (config.getBlueskyIdentifierEnv() == null || config.getBlueskyIdentifierEnv().isBlank()) {
+      throw new IOException("Configuration blueskyIdentifierEnv must not be empty");
+    }
+    if (config.getBlueskyAppPasswordEnv() == null || config.getBlueskyAppPasswordEnv().isBlank()) {
+      throw new IOException("Configuration blueskyAppPasswordEnv must not be empty");
     }
     return config;
   }

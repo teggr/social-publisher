@@ -94,4 +94,21 @@ class BlueskyPublisherTest {
 
     assertFalse(failure.isRetrySafe());
   }
+
+  @Test
+  void rejectsNonTlsRemoteServiceBeforeSendingCredentials() {
+    AppConfig config = new AppConfig();
+    config.setBlueskyService("http://example.test");
+    BlueskyPublisher publisher =
+        new BlueskyPublisher(
+            config,
+            java.net.http.HttpClient.newHttpClient(),
+            Map.of("BLUESKY_IDENTIFIER", "user.example", "BLUESKY_APP_PASSWORD", "app-password"));
+    SocialPost post =
+        new SocialPost(UUID.randomUUID().toString(), "Hello", Instant.now().toString());
+
+    PublishException failure = assertThrows(PublishException.class, () -> publisher.publish(post));
+
+    assertTrue(failure.isRetrySafe());
+  }
 }

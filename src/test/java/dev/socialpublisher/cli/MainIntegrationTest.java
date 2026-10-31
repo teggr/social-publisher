@@ -31,7 +31,11 @@ class MainIntegrationTest {
     assertTrue(matcher.find());
     String id = matcher.group(1);
 
+    assertEquals(
+        2, invoke(environment, "publish", id, "--platform", "BLUESKY", "--dry-run").exitCode);
+    assertEquals(0, invoke(environment, "approve", id, "--by", "first reviewer").exitCode);
     assertEquals(0, invoke(environment, "draft", "edit", id, "--text", "Final version").exitCode);
+    assertTrue(invoke(environment, "preview", id).output.contains("Approval: not approved"));
     assertEquals(0, invoke(environment, "approve", id, "--by", "reviewer").exitCode);
     String preview = invoke(environment, "preview", id).output;
     assertTrue(preview.contains("Approval: approved"));
