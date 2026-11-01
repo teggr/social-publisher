@@ -2,3 +2,17 @@ dataDirectory: .social-publisher
 blueskyService: https://bsky.social
 blueskyIdentifierEnv: BLUESKY_IDENTIFIER
 blueskyAppPasswordEnv: BLUESKY_APP_PASSWORD
+
+# AI article generation. The API key is read from the environment variable named
+# here; never put the key itself in this file.
+openAiApiKeyEnv: OPENAI_API_KEY
+openAiBaseUrl: https://api.openai.com
+openAiModel: gpt-4o-mini
+openAiTimeoutSeconds: 60
+
+# Character limit of your Mastodon instance (500 on most).
+mastodonCharacterLimit: 500
+
+# Editorial profiles live in <profilesDirectory>/<name>.yml.
+profilesDirectory: profiles
+# defaultProfile: personal-technical-blog

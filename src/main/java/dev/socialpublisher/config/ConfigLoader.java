@@ -30,6 +30,25 @@ public final class ConfigLoader {
     if (config.getBlueskyAppPasswordEnv() == null || config.getBlueskyAppPasswordEnv().isBlank()) {
       throw new IOException("Configuration blueskyAppPasswordEnv must not be empty");
     }
+    requireText(config.getOpenAiApiKeyEnv(), "openAiApiKeyEnv");
+    requireText(config.getOpenAiBaseUrl(), "openAiBaseUrl");
+    requireText(config.getOpenAiModel(), "openAiModel");
+    requireText(config.getProfilesDirectory(), "profilesDirectory");
+    if (config.getOpenAiTimeoutSeconds() < 1 || config.getOpenAiTimeoutSeconds() > 600) {
+      throw new IOException("Configuration openAiTimeoutSeconds must be between 1 and 600");
+    }
+    if (config.getMastodonCharacterLimit() < 50) {
+      throw new IOException("Configuration mastodonCharacterLimit must be at least 50");
+    }
+    if (config.getDefaultProfile() != null && config.getDefaultProfile().isBlank()) {
+      config.setDefaultProfile(null);
+    }
     return config;
+  }
+
+  private static void requireText(String value, String name) throws IOException {
+    if (value == null || value.isBlank()) {
+      throw new IOException("Configuration " + name + " must not be empty");
+    }
   }
 }
