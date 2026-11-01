@@ -1,10 +1,17 @@
 package dev.socialpublisher.cli;
 
+import dev.socialpublisher.article.ArticleExtractor;
+import dev.socialpublisher.article.HtmlArticleExtractor;
 import dev.socialpublisher.config.AppConfig;
 import dev.socialpublisher.config.ConfigLoader;
+import dev.socialpublisher.generation.ArticleDraftService;
+import dev.socialpublisher.generation.EditorialProfile;
 import dev.socialpublisher.generation.PostGenerator;
+import dev.socialpublisher.generation.ProfileLoader;
 import dev.socialpublisher.generation.TemplatePostGenerator;
+import dev.socialpublisher.generation.openai.OpenAiPostGenerator;
 import dev.socialpublisher.model.Platform;
+import dev.socialpublisher.model.PlatformDraft;
 import dev.socialpublisher.model.PublishingResult;
 import dev.socialpublisher.model.PublishingStatus;
 import dev.socialpublisher.model.SocialPost;
@@ -13,7 +20,6 @@ import dev.socialpublisher.publishing.BlueskyPublisher;
 import dev.socialpublisher.publishing.PlatformPublisher;
 import dev.socialpublisher.publishing.PublishOutcome;
 import dev.socialpublisher.publishing.PublishingService;
-import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -33,24 +39,49 @@ public final class Main {
     }
   }
 
+  /** Creates the AI generator used for article generation; replaceable in tests. */
+  @FunctionalInterface
+  public interface GeneratorFactory {
+    PostGenerator create(AppConfig config, String modelOverride);
+  }
+
   public static int run(
       String[] args, PrintStream out, PrintStream err, Map<String, String> environment) {
+    return run(args, out, err, environment, new HtmlArticleExtractor(), null);
+  }
+
+  public static int run(
+      String[] args,
+      PrintStream out,
+      PrintStream err,
+      Map<String, String> environment,
+      ArticleExtractor extractor,
+      GeneratorFactory generatorFactory) {
     try {
       List<String> arguments = new ArrayList<>(Arrays.asList(args));
       Path configPath = configPath(arguments, environment);
+      String dataDirectoryOverride = extractOption(arguments, "--data-dir");
       if (arguments.isEmpty() || arguments.contains("--help") || arguments.contains("-h")) {
         printUsage(out);
         return 0;
       }
 
       AppConfig config = ConfigLoader.load(configPath);
-      Path dataDirectory = Path.of(config.getDataDirectory());
+      Path dataDirectory =
+          Path.of(
+              dataDirectoryOverride != null ? dataDirectoryOverride : config.getDataDirectory());
       YamlDraftRepository repository = new YamlDraftRepository(dataDirectory);
       List<PlatformPublisher> publishers =
           List.of(
               new BlueskyPublisher(config, java.net.http.HttpClient.newHttpClient(), environment));
       PublishingService publishingService = new PublishingService(repository, publishers);
-      return execute(arguments, repository, publishingService, new TemplatePostGenerator(), out);
+      GeneratorFactory factory =
+          generatorFactory != null
+              ? generatorFactory
+              : (cfg, model) -> OpenAiPostGenerator.fromConfig(cfg, environment, model);
+      Generation generation = new Generation(config, extractor, factory);
+      return execute(
+          arguments, repository, publishingService, new TemplatePostGenerator(), generation, out);
     } catch (Exception e) {
       err.println("Error: " + e.getMessage());
       return 2;
@@ -62,10 +93,18 @@ public final class Main {
       YamlDraftRepository repository,
       PublishingService publishingService,
       PostGenerator generator,
+      Generation generation,
       PrintStream out)
-      throws IOException {
+      throws Exception {
     String command = args.get(0);
     if ("generate".equals(command)) {
+      String url = option(args, "--url", null);
+      if (url != null) {
+        if (option(args, "--topic", null) != null) {
+          throw new IllegalArgumentException("Use either --url or --topic, not both");
+        }
+        return generateFromArticle(args, url, repository, generation, out);
+      }
       String text = generator.generate(requiredOption(args, "--topic"));
       SocialPost post = createPost(text);
       repository.create(post);
@@ -93,9 +132,23 @@ public final class Main {
         if (text.isBlank()) {
           throw new IllegalArgumentException("Draft text must not be empty");
         }
+        String platformOption = option(args, "--platform", null);
+        Platform editPlatform = platformOption == null ? null : parsePlatform(platformOption);
         repository.update(
             id,
             post -> {
+              if (post.getPlatformDrafts().isEmpty() && editPlatform != null) {
+                throw new IllegalArgumentException(
+                    "--platform applies only to generated multi-platform drafts");
+              }
+              if (!post.getPlatformDrafts().isEmpty() && editPlatform == null) {
+                throw new IllegalArgumentException(
+                    "This draft has per-platform text; choose one with --platform "
+                        + post.getPlatformDrafts().keySet());
+              }
+              if (editPlatform != null && !post.getPlatformDrafts().containsKey(editPlatform)) {
+                throw new IllegalArgumentException("Draft has no " + editPlatform + " text");
+              }
               boolean hasAttempts =
                   post.getPublishingResults().values().stream()
                       .anyMatch(result -> result.getAttempts() > 0);
@@ -103,7 +156,12 @@ public final class Main {
                 throw new IllegalStateException(
                     "A draft cannot be edited after a publication attempt");
               }
-              post.setText(text);
+              if (editPlatform != null) {
+                post.getPlatformDrafts()
+                    .put(editPlatform, new PlatformDraft(text, Instant.now().toString()));
+              } else {
+                post.setText(text);
+              }
               post.setApproved(false);
               post.setApprovedBy(null);
               post.setApprovedAt(null);
@@ -195,6 +253,47 @@ public final class Main {
     throw new IllegalArgumentException("Unknown command: " + command);
   }
 
+  private record Generation(
+      AppConfig config, ArticleExtractor extractor, GeneratorFactory generatorFactory) {}
+
+  private static int generateFromArticle(
+      List<String> args,
+      String url,
+      YamlDraftRepository repository,
+      Generation generation,
+      PrintStream out)
+      throws Exception {
+    AppConfig config = generation.config();
+    String profileName = option(args, "--profile", config.getDefaultProfile());
+    EditorialProfile profile =
+        profileName == null
+            ? EditorialProfile.defaultProfile()
+            : ProfileLoader.load(Path.of(config.getProfilesDirectory()), profileName);
+    PostGenerator generator =
+        generation.generatorFactory().create(config, option(args, "--model", null));
+    ArticleDraftService service =
+        new ArticleDraftService(
+            generation.extractor(), generator, config.getMastodonCharacterLimit());
+    SocialPost post = service.generate(url, profile);
+    boolean preview = args.contains("--preview");
+    if (preview) {
+      out.println("Preview only; nothing was saved.");
+    } else {
+      repository.create(post);
+      out.println("Created draft " + post.getId());
+    }
+    printPreview(post, out);
+    if (!preview) {
+      out.println(
+          "Not approved. Review with 'preview "
+              + post.getId()
+              + "', edit with 'draft edit "
+              + post.getId()
+              + " --platform <PLATFORM> --text <text>', then approve explicitly.");
+    }
+    return 0;
+  }
+
   private static Platform parsePlatform(String value) {
     try {
       return Platform.valueOf(value.toUpperCase(java.util.Locale.ROOT));
@@ -213,8 +312,34 @@ public final class Main {
   private static void printPreview(SocialPost post, PrintStream out) {
     out.println("Draft: " + post.getId());
     out.println("Approval: " + (post.isApproved() ? "approved" : "not approved"));
-    out.println("Text:");
-    out.println(post.getText());
+    if (post.getArticle() != null) {
+      out.println("Article: " + post.getArticle().getTitle());
+      out.println("Source: " + post.getArticle().getSourceUrl());
+      out.println("Canonical: " + post.getArticle().getCanonicalUrl());
+    }
+    if (post.getGeneration() != null) {
+      out.println(
+          "Generated: "
+              + post.getGeneration().getGeneratedAt()
+              + " by "
+              + post.getGeneration().getProvider()
+              + "/"
+              + post.getGeneration().getModel()
+              + " (profile: "
+              + post.getGeneration().getProfile()
+              + ")");
+    }
+    if (post.getPlatformDrafts().isEmpty()) {
+      out.println("Text:");
+      out.println(post.getText());
+    } else {
+      for (Map.Entry<Platform, PlatformDraft> entry : post.getPlatformDrafts().entrySet()) {
+        out.println();
+        out.println("[" + entry.getKey() + "]");
+        out.println(entry.getValue().getText());
+      }
+      out.println();
+    }
     for (Map.Entry<Platform, PublishingResult> entry : post.getPublishingResults().entrySet()) {
       PublishingResult result = entry.getValue();
       PublishingStatus status =
@@ -270,6 +395,27 @@ public final class Main {
     return Path.of(configuredPath);
   }
 
+  /** Removes a global {@code --name value} or {@code --name=value} option from the arguments. */
+  private static String extractOption(List<String> args, String name) {
+    for (int i = 0; i < args.size(); i++) {
+      String arg = args.get(i);
+      if (arg.startsWith(name + "=")) {
+        args.remove(i);
+        return arg.substring(name.length() + 1);
+      }
+      if (arg.equals(name)) {
+        if (i + 1 >= args.size()) {
+          throw new IllegalArgumentException("Missing value after " + name);
+        }
+        String value = args.get(i + 1);
+        args.remove(i + 1);
+        args.remove(i);
+        return value;
+      }
+    }
+    return null;
+  }
+
   private static String oneLine(String text) {
     return text == null ? "" : text.replace('\n', ' ').replace('\r', ' ');
   }
@@ -279,8 +425,10 @@ public final class Main {
         """
         Usage:
           jbang social-publisher.java generate --topic <topic>
+          jbang social-publisher.java generate --url <article-url> [--profile <name>]
+              [--model <model>] [--preview]
           jbang social-publisher.java draft create --text <text>
-          jbang social-publisher.java draft edit <id> --text <text>
+          jbang social-publisher.java draft edit <id> --text <text> [--platform <platform>]
           jbang social-publisher.java approve <id> [--by <name>]
           jbang social-publisher.java preview <id>
           jbang social-publisher.java publish <id> --platform BLUESKY [--dry-run]
@@ -289,7 +437,11 @@ public final class Main {
           jbang social-publisher.java list
 
         Global options:
-          --config <path>   YAML configuration file (default: social-publisher.yml)
+          --config <path>     YAML configuration file (default: social-publisher.yml)
+          --data-dir <path>   Draft data directory, overriding dataDirectory in the config
+
+        Article generation reads the OpenAI key from OPENAI_API_KEY (name configurable).
+        It only creates unapproved drafts; --preview prints them without saving.
         """);
   }
 }

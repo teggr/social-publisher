@@ -1,0 +1,18 @@
+# Editorial profile for a Java technology/resource catalogue (for example awesome-java-ui.com).
+# Select with: generate --url <article-url> --profile java-resource-catalogue
+siteName: Awesome Java UI
+websiteUrl: https://awesome-java-ui.com
+tone: helpful, neutral and informative, like a well-curated reading list
+audience: Java developers evaluating UI frameworks, libraries and tools
+writingStyle: >-
+  Say what the resource is and who it is useful for, using only what the page
+  states. Third person; no personal anecdotes.
+avoid:
+  - claiming one tool is the best or comparing it unfavourably with others
+  - inventing features, version numbers, licences or benchmarks
+  - hype and superlatives
+platformInstructions:
+  linkedin: Describe what the resource covers and which problem it helps a Java developer solve.
+  bluesky: Name the resource, what it is for, and the link.
+  x: Name the resource, one benefit stated on the page, and the link.
+  mastodon: Informative and community-minded; include #Java and one topical hashtag.

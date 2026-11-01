@@ -23,6 +23,23 @@ unless the task explicitly asks for data migration or repair.
 6. Publish for real only when the user explicitly requests publication and the
    post is approved. Never bypass the CLI approval guard.
 
+## Generating drafts from an article
+
+`jbang social-publisher.java generate --url <article-url> --profile <name>
+[--model <model>] [--preview] [--data-dir <dir>]` creates one draft holding
+separate LinkedIn, Bluesky, X and Mastodon text, plus article metadata and
+generation provenance.
+
+- Requires `OPENAI_API_KEY` (or the variable named by `openAiApiKeyEnv`) in the
+  environment. Never write the key into files, commands or output.
+- Profiles live in `profiles/<name>.yml`; pick the one matching the site.
+- Use `--preview` first when unsure; it saves nothing.
+- Generated drafts are always unapproved. Never approve or publish them
+  without the user reading each platform's text and explicitly asking.
+- Review posts against the article; the model can be wrong. Fix text with
+  `draft edit <id> --platform <PLATFORM> --text "..."` (clears approval).
+- Only public http(s) URLs are fetched; do not try to bypass URL safety checks.
+
 ## Security and outcomes
 
 - Never place access tokens, app passwords, or other credentials in source,
@@ -34,7 +51,7 @@ unless the task explicitly asks for data migration or repair.
   platform manually, then use `reconcile` (never edit YAML); automatic retries are
   intentionally blocked to prevent duplicates.
 - Publishing state is independent for each platform. Bluesky is the only live
-  adapter in this milestone; LinkedIn, X, and Mastodon are not configured.
+  adapter; LinkedIn, X, and Mastodon are not configured.
 
 Use `jbang social-publisher.java --help` for the current command list. See the
 repository README for configuration and development commands.

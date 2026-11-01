@@ -58,7 +58,7 @@ public class BlueskyPublisher implements PlatformPublisher {
 
   @Override
   public PublishReceipt publish(SocialPost post) throws PublishException {
-    String text = post.getText();
+    String text = post.textFor(Platform.BLUESKY);
     validateText(text);
     String service = serviceBase();
     String identifier = environment.apply(config.getBlueskyIdentifierEnv());

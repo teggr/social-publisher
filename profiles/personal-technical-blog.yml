@@ -1,0 +1,17 @@
+# Editorial profile for a personal technical blog (for example robintegg.com).
+# Select with: generate --url <article-url> --profile personal-technical-blog
+siteName: Robin Tegg's blog
+websiteUrl: https://robintegg.com
+tone: thoughtful, first-person, curious and plain-spoken
+audience: working Java and software developers who like practical detail
+writingStyle: >-
+  Short sentences. Lead with the problem or the surprising takeaway. Concrete
+  over abstract. No hype.
+avoid:
+  - marketing cliches such as "game-changer", "excited to share" or "unlock"
+  - overstating results or claiming anything the article does not say
+platformInstructions:
+  linkedin: Write in the first person as the author, as if telling a colleague what was learned.
+  bluesky: One sharp observation from the article, then the link.
+  x: A single hook sentence and the link.
+  mastodon: Friendly and informative; CamelCase hashtags such as #Java at the end.

@@ -33,7 +33,7 @@ public class PublishingService {
       throw new IllegalStateException("Draft must be approved before publishing");
     }
     if (dryRun) {
-      return new PublishOutcome(true, post.getText(), null);
+      return new PublishOutcome(true, post.textFor(platform), null);
     }
 
     SocialPost postToPublish =
